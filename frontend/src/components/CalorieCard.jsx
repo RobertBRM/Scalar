@@ -1,0 +1,3 @@
+import React from 'react';
+
+export default function CalorieCard({totals,goals,remaining}){return <article className="panel calories"><div className="panel-heading"><b>Daily calories</b><span>{goals.cal.toLocaleString()} kcal goal</span></div><div className="calories-inner"><div className="ring" style={{'--progress':`${Math.min(100,totals.cal/goals.cal*100)}%`}}><div><strong>{totals.cal.toLocaleString()}</strong><small>kcal eaten</small></div></div><div className="calorie-right"><strong>{remaining.toLocaleString()}</strong><span>kcal remaining</span><small>Room for something good.</small></div></div></article>}
