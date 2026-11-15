@@ -8,6 +8,7 @@ from app.routers.user_profile import router as user_profile_router
 from app.routers.nutrition_goal import router as nutrition_goal_router
 from app.routers.meal import router as meal_router
 from app.routers.meal_item import router as meal_item_router
+from app.routers.raspberry import router as raspberry_router
 
 app = FastAPI(
     title="Daily Plate API",
@@ -32,6 +33,7 @@ app.include_router(user_profile_router)
 app.include_router(nutrition_goal_router)
 app.include_router(meal_router)
 app.include_router(meal_item_router)
+app.include_router(raspberry_router)
 
 @app.get("/", tags=["Health"])
 def root():
