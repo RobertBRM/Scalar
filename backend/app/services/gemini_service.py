@@ -51,7 +51,7 @@ def optimize_image_for_groq(image_bytes: bytes) -> str:
 
 
 def extract_json_dict(raw_text: str) -> dict:
-    """Safely extracts JSON from model output even if <think> tags or markdown exist."""
+    """Extracts the JSON object from Qwen's response."""
     cleaned = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL).strip()
     cleaned = re.sub(r"```(?:json)?", "", cleaned).strip()
 
@@ -63,6 +63,16 @@ def extract_json_dict(raw_text: str) -> dict:
     return json.loads(cleaned)
 
 
+def parse_num(val, default=0.0) -> float:
+    """Safely extracts a float even if the model returns strings like '22.8g' or '89 kcal'."""
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    match = re.search(r"[-+]?\d*\.?\d+", str(val))
+    return float(match.group(0)) if match else default
+
+
 async def analyze_food(
     image_bytes: bytes,
     mime_type: str,
@@ -70,85 +80,82 @@ async def analyze_food(
 ):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        print("[Fail-Safe] GROQ_API_KEY is not configured in .env!")
+        print("[Fail-Safe] GROQ_API_KEY is not configured.")
         return get_failsafe_response()
 
     client = AsyncGroq(api_key=api_key)
 
     try:
         b64_image = optimize_image_for_groq(image_bytes)
-    except Exception as img_err:
-        print(f"[Fail-Safe] Image optimization failed, using raw bytes: {img_err}")
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-    prompt = """Identify the food, fruit, drink, or snack in this image.
-If ANY food or fruit (like a banana, apple, snack, meal) is visible, provide its name and estimated nutrition per 100g.
-Do NOT output any thinking or explanation. Output ONLY a raw JSON object with these exact keys:
+        prompt = """You are a nutrition database.
+1. Identify the food or fruit in this image.
+2. Estimate its realistic USDA nutritional values per 100 grams.
+3. CRITICAL: NEVER return 0 for calories, carbs_g, protein_g, or fat_g when a food is identified! Always provide realistic, non-zero nutritional estimates for that food.
+4. Only set "name" to "Unknown" if there is no food in the image.
+
+Respond with ONLY a valid JSON object (no thinking, no markdown) using these exact keys:
 {
-  "name": "Banana",
+  "name": "<identified food name>",
   "brand": null,
   "serving_size": 100.0,
   "serving_unit": "g",
-  "calories": 89,
-  "protein_g": 1.1,
-  "carbs_g": 22.8,
-  "fat_g": 0.3,
-  "fiber_g": 2.6
+  "calories": <integer kcal per 100g>,
+  "protein_g": <float grams protein per 100g>,
+  "carbs_g": <float grams carbs per 100g>,
+  "fat_g": <float grams fat per 100g>,
+  "fiber_g": <float grams fiber per 100g>
 }"""
 
-    # Try Qwen first, and fall back to Llama 4 Maverick if Qwen errors out
-    vision_models = [
-        "qwen/qwen3.8-27b",
-        "meta-llama/llama-4-maverick-17b-128e-instruct",
-    ]
-
-    for model_id in vision_models:
-        try:
-            print(f"[Groq] Sending image to {model_id}...")
-            response = await client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64_image}"
-                                }
+        response = await client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{b64_image}"
                             }
-                        ]
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=512,
-            )
+                        }
+                    ]
+                }
+            ],
+            temperature=0.1,
+            max_tokens=512,
+        )
 
-            content = response.choices[0].message.content
-            print(f"[Groq Raw Output ({model_id})]: {content}")
+        content = response.choices[0].message.content
+        print(f"[Qwen Raw Output]: {content}")
 
-            if not content:
-                continue
+        if not content:
+            return get_failsafe_response()
 
-            data = extract_json_dict(content)
+        data = extract_json_dict(content)
 
-            food = FoodAnalysis(
-                name=str(data.get("name") or "Unknown"),
-                brand=data.get("brand"),
-                serving_size=100.0,
-                serving_unit="g",
-                calories=max(0, int(round(float(data.get("calories") or 0)))),
-                protein_g=max(0.0, float(data.get("protein_g") or 0.0)),
-                carbs_g=max(0.0, float(data.get("carbs_g") or 0.0)),
-                fat_g=max(0.0, float(data.get("fat_g") or 0.0)),
-                fiber_g=max(0.0, float(data.get("fiber_g") or 0.0)),
-            )
+        # Support alternative key names just in case Qwen omits '_g'
+        cal = int(round(parse_num(data.get("calories") or data.get("kcal"), 0)))
+        prot = parse_num(data.get("protein_g") or data.get("protein"), 0.0)
+        carbs = parse_num(data.get("carbs_g") or data.get("carbs") or data.get("carbohydrates"), 0.0)
+        fat = parse_num(data.get("fat_g") or data.get("fat"), 0.0)
+        fiber = parse_num(data.get("fiber_g") or data.get("fiber"), 0.0)
 
-            return food.model_dump(mode="json")
+        food = FoodAnalysis(
+            name=str(data.get("name") or "Unknown").strip(),
+            brand=data.get("brand"),
+            serving_size=100.0,
+            serving_unit="g",
+            calories=max(0, cal),
+            protein_g=round(max(0.0, prot), 1),
+            carbs_g=round(max(0.0, carbs), 1),
+            fat_g=round(max(0.0, fat), 1),
+            fiber_g=round(max(0.0, fiber), 1),
+        )
 
-        except Exception as error:
-            print(f"[Groq Warning] {model_id} failed: {repr(error)}")
+        return food.model_dump(mode="json")
 
-    print("[Fail-Safe] All vision models failed.")
-    return get_failsafe_response()
+    except Exception as error:
+        print(f"[Fail-Safe] Qwen analysis failed: {repr(error)}")
+        return get_failsafe_response()
