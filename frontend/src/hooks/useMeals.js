@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { logMeal, loadDiary } from '../services/mealService';
+import { logMeal, loadDiary, deleteMeal, deleteMealItem, getMealNutrition } from '../services/mealService';
 import { USER_ID } from '../services/api';
 import { useStoredState } from './usePreferences';
 
@@ -29,6 +29,7 @@ export function useMeals() {
   const [error, setError] = useState(null);
   const revision = useRef(0);
   const saving = useRef(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -96,5 +97,33 @@ export function useMeals() {
     }
   }
 
-  return { meals, addMeal, loading, error };
+  async function removeEntry(mealId, itemId) {
+    if (saving.current) return false;
+    saving.current = true;
+    revision.current++;
+    setDeleting(true);
+    setError(null);
+    try {
+      if (itemId == null) {
+        await deleteMeal(mealId);
+        setMeals(old => old.filter(meal => meal.id !== mealId));
+      } else {
+        await deleteMealItem(itemId);
+        const nutrition = await getMealNutrition(mealId);
+        setMeals(old => old.map(meal => meal.id === mealId ? {
+          ...meal, cal: Number(nutrition.calories), protein: Number(nutrition.protein_g),
+          carbs: Number(nutrition.carbs_g), fat: Number(nutrition.fat_g)
+        } : meal));
+      }
+      return true;
+    } catch (err) {
+      setError(`Could not finish deleting: ${err.message}`);
+      return false;
+    } finally {
+      saving.current = false;
+      setDeleting(false);
+    }
+  }
+
+  return { meals, addMeal, loading, error, removeEntry, deleting };
 }

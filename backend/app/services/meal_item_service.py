@@ -68,6 +68,12 @@ def get_meal_items(meal_id: int):
     )
 
 
+def get_meal_foods(meal_id: int):
+    if meal_repository.get_meal_by_id(meal_id) is None:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal_item_repository.get_meal_food_details(meal_id)
+
+
 def update_meal_item(
     item_id: int,
     data: MealItemUpdate

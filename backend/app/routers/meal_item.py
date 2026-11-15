@@ -42,6 +42,11 @@ def get_meal_nutrition(meal_id: int):
     )
 
 
+@router.get("/meal/{meal_id}/foods")
+def get_meal_foods(meal_id: int):
+    return meal_item_service.get_meal_foods(meal_id)
+
+
 @router.get(
     "/{item_id}",
     response_model=MealItemResponse

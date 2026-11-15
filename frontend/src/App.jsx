@@ -41,7 +41,7 @@ export default function App() {
   }, []);
 
   // Meal data and functionality
-  const { meals, addMeal, loading, error } = useMeals();
+  const { meals, addMeal, loading, error, removeEntry, deleting } = useMeals();
 
   // Calculate nutrition totals
   const { totals, remaining } = useNutrition(meals, goals);
@@ -96,6 +96,8 @@ export default function App() {
 
   // Shared properties passed to pages
   const shared = {
+    onDelete: removeEntry,
+    deleting,
     meals,
     totals,
     remaining,
