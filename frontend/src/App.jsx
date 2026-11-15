@@ -17,21 +17,17 @@ import Settings from './pages/Settings';
 import { useMeals } from './hooks/useMeals';
 import { useNutrition } from './hooks/useNutrition';
 import { checkBackend } from './services/api';
+import { useGoals, useStoredState } from './hooks/usePreferences';
 
 export default function App() {
   const [page, setPage] = useState('Overview');
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState('');
-  const [water, setWater] = useState(6);
-  const [saved, setSaved] = useState([]);
+  const [water, setWater] = useStoredState(`water:${new Date().toLocaleDateString('en-CA')}`, 0);
+  const [saved, setSaved] = useStoredState('saved-recipes', []);
   const [modal, setModal] = useState(null);
 
-  const [goals, setGoals] = useState({
-    cal: 2200,
-    protein: 140,
-    carbs: 250,
-    fat: 71
-  });
+  const { goals, saveGoals, loading: goalsLoading, error: goalsError } = useGoals();
 
   // Check backend connection when application loads
   useEffect(() => {
@@ -141,6 +137,8 @@ export default function App() {
         />
 
         <main>
+          {(error || goalsError) && <p role="alert">Could not sync with the backend: {error || goalsError}</p>}
+          {loading && <p role="status">Loading your meals…</p>}
           <div className="hero">
             <div>
               <div className="eyebrow">
@@ -190,7 +188,8 @@ export default function App() {
           {page === 'My goals' && (
             <Goals
               goals={goals}
-              setGoals={setGoals}
+              onSave={saveGoals}
+              loading={goalsLoading}
             />
           )}
 
