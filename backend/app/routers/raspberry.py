@@ -2,6 +2,9 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import Optional
 
+from pathlib import Path
+from uuid import uuid4
+
 router = APIRouter(
     prefix="/raspberry",
     tags=["Raspberry Pi"]
@@ -33,6 +36,20 @@ async def analyze_image(
 
     # Read the uploaded image
     image_bytes = await image.read()
+
+    # Create an uploads folder
+    UPLOAD_DIR = Path("uploads")
+    UPLOAD_DIR.mkdir(exist_ok=True)
+
+    # Generate a unique filename
+    extension = ".jpg" if image.content_type == "image/jpeg" else ".png"
+    filename = f"{uuid4()}{extension}"
+
+    # Save image
+    file_path = UPLOAD_DIR / filename
+    file_path.write_bytes(image_bytes)
+
+    print(f"Image saved to: {file_path.resolve()}")
 
     # Prevent empty uploads
     if not image_bytes:

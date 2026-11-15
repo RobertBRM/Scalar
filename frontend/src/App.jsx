@@ -33,7 +33,7 @@ export default function App() {
     fat: 71
   });
 
-  // Test frontend-to-backend connection
+  // Check backend connection when application loads
   useEffect(() => {
     checkBackend()
       .then(data => {
@@ -44,14 +44,19 @@ export default function App() {
       });
   }, []);
 
-  const { meals, addMeal } = useMeals();
+  // Meal data and functionality
+  const { meals, addMeal, loading, error } = useMeals();
+
+  // Calculate nutrition totals
   const { totals, remaining } = useNutrition(meals, goals);
 
+  // Navigate between pages
   const navigate = p => {
     setPage(p);
     setMenu(false);
   };
 
+  // Open meal logging modal
   const logMeal = (name = 'Dinner') => {
     setModal({
       type: 'meal',
@@ -59,6 +64,7 @@ export default function App() {
     });
   };
 
+  // Save or unsave recipes
   const toggleSave = name => {
     setSaved(s =>
       s.includes(name)
@@ -67,6 +73,7 @@ export default function App() {
     );
   };
 
+  // Handle recipe search
   const handleSearch = value => {
     setSearch(value);
 
@@ -75,6 +82,23 @@ export default function App() {
     }
   };
 
+  // Save meal to backend
+  const handleSaveMeal = async entry => {
+    try {
+      await addMeal(entry);
+
+      // Close modal only after successful save
+      setModal(null);
+
+      console.log('Meal saved successfully');
+    } catch (error) {
+      console.error('Failed to save meal:', error);
+
+      alert('Could not save meal: ' + error.message);
+    }
+  };
+
+  // Shared properties passed to pages
   const shared = {
     meals,
     totals,
@@ -84,10 +108,14 @@ export default function App() {
     setWater,
     search,
     saved,
+    loading,
+    error,
     onLogMeal: logMeal,
     onToggleSave: toggleSave,
-    onView: recipe =>
-      setModal({ type: 'recipe', recipe }),
+    onView: recipe => setModal({
+      type: 'recipe',
+      recipe
+    }),
     onExplore: () => navigate('Recipes')
   };
 
@@ -107,7 +135,9 @@ export default function App() {
             setModal({ type: 'notifications' })
           }
           menu={menu}
-          onToggleMenu={() => setMenu(v => !v)}
+          onToggleMenu={() =>
+            setMenu(v => !v)
+          }
         />
 
         <main>
@@ -132,6 +162,7 @@ export default function App() {
 
             <div className="date">
               <CalendarDays size={18} />
+
               {new Date().toLocaleDateString('en-US', {
                 weekday: 'long',
                 month: 'long',
@@ -169,17 +200,16 @@ export default function App() {
         </main>
       </div>
 
+      {/* Meal logging modal */}
       {modal?.type === 'meal' && (
         <MealModal
           initial={modal.initial}
           onClose={() => setModal(null)}
-          onSave={entry => {
-            addMeal(entry);
-            setModal(null);
-          }}
+          onSave={handleSaveMeal}
         />
       )}
 
+      {/* Other modals */}
       {modal && modal.type !== 'meal' && (
         <InfoModal
           modal={modal}
