@@ -1,4 +1,4 @@
-
+from datetime import datetime
 from fastapi import (
     APIRouter,
     UploadFile,
@@ -10,7 +10,6 @@ from fastapi import (
 from pathlib import Path
 from uuid import uuid4
 import logging
-from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from app.services.gemini_service import analyze_food
@@ -27,6 +26,18 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def get_auto_meal_type() -> MealType:
+    """Automatically assigns breakfast, lunch, dinner, or snack based on current hour."""
+    hour = datetime.now().hour
+    if 5 <= hour < 11:
+        return "breakfast"
+    elif 11 <= hour < 16:
+        return "lunch"
+    elif 16 <= hour < 22:
+        return "dinner"
+    return "snack"
+
+
 @router.get("/health")
 def check_connection():
     return {
@@ -40,7 +51,7 @@ async def analyze_image(
     image: UploadFile = File(...),
     weight_category: str | None = Form(None),
     user_id: int = Form(1, gt=0),
-    meal_type: MealType = Form("snack")
+    meal_type: MealType | None = Form(None)
 ):
     if image.content_type not in (
         "image/jpeg",
@@ -77,7 +88,7 @@ async def analyze_image(
 
     file_path.write_bytes(image_bytes)
 
-    # Send the picture to Gemini
+    # Analyze the food image
     try:
         analysis = await analyze_food(
             image_bytes=image_bytes,
@@ -86,23 +97,33 @@ async def analyze_image(
         )
 
     except Exception as error:
-        print("Gemini analysis failed:", repr(error))
+        print("Analysis failed:", repr(error))
 
         raise HTTPException(
             status_code=502,
-            detail="Gemini analysis failed"
+            detail="Analysis failed"
         )
 
-    # Save before acknowledging success so the dashboard reads the same data.
+    # Do NOT save to database if the image could not be identified ("Unknown")
+    food_name = str(analysis.get("name", "")).strip().lower()
+    if food_name in {"", "unknown", "unidentified", "none", "null", "error"}:
+        return {
+            "status": "success",
+            "filename": filename,
+            "weight_category": weight_category,
+            "analysis": analysis,
+            "records": None
+        }
+
+    # Auto-select meal_type by time of day if not explicitly sent
+    resolved_meal_type: MealType = meal_type if meal_type is not None else get_auto_meal_type()
+
+    # Save valid food scan to database (never crash the Pi response if DB has an issue)
+    records = None
     try:
-        records = await run_in_threadpool(save_scan, analysis, user_id, meal_type)
-    except HTTPException:
-        raise
-    except ValidationError as error:
-        raise HTTPException(status_code=502, detail="Food analysis returned invalid nutrition data") from error
+        records = await run_in_threadpool(save_scan, analysis, user_id, resolved_meal_type)
     except Exception as error:
-        logging.getLogger(__name__).exception("Could not persist Raspberry Pi scan")
-        raise HTTPException(status_code=503, detail="Could not save scan; please retry") from error
+        logging.getLogger(__name__).exception(f"Could not persist Raspberry Pi scan: {error}")
 
     # Return JSON to Raspberry Pi
     return {
