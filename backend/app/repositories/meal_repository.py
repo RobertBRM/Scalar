@@ -31,6 +31,10 @@ def update_meal(meal_id: int, meal: MealUpdate):
 
 
 def delete_meal(meal_id: int):
-    response = get_supabase().table("meals").delete().eq("id", meal_id).execute()
+    client = get_supabase()
+    # Remove diary items first, including on schemas without ON DELETE CASCADE.
+    # Catalog foods can be shared by other meals and must be retained.
+    client.table("meal_items").delete().eq("meal_id", meal_id).execute()
+    response = client.table("meals").delete().eq("id", meal_id).execute()
     row = first(response)
     return {"id": row["id"]} if row else None

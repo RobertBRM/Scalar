@@ -27,6 +27,9 @@ export const deleteMeal = (mealId) =>
 export const getMealNutrition = mealId =>
   apiRequest(`/meal-items/meal/${mealId}/nutrition`);
 
+export const deleteMealItem = itemId => apiRequest(`/meal-items/${itemId}`, { method: 'DELETE' });
+export const getMealFoods = mealId => apiRequest(`/meal-items/meal/${mealId}/foods`);
+
 export async function loadDiary(userId) {
   const meals = await getUserMeals(userId);
   const results = await Promise.allSettled(meals.map(async meal => {
