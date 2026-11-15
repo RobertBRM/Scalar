@@ -1,77 +1,32 @@
-
-from psycopg.rows import dict_row
-from psycopg import sql
-from app.database import get_connection
-from app.models.nutrition_goal import (
-    NutritionGoalCreate,
-    NutritionGoalUpdate
-)
+from app.database import get_supabase
+from app.repositories._supabase_utils import first, serialize
+from datetime import datetime, timezone
+from app.models.nutrition_goal import NutritionGoalCreate, NutritionGoalUpdate
 
 
 def create_nutrition_goal(goal: NutritionGoalCreate):
-    data = goal.model_dump()
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                INSERT INTO nutrition_goals (
-                    user_id, calorie_goal, protein_goal_g,
-                    carb_goal_g, fat_goal_g, water_goal_ml
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING *
-                """,
-                tuple(data.values())
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("nutrition_goals").insert(serialize(goal.model_dump())).execute()
+    return first(response)
 
 
 def get_nutrition_goal_by_user_id(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT * FROM nutrition_goals WHERE user_id = %s",
-                (user_id,)
-            )
-            return cursor.fetchone()
+    response = (get_supabase().table("nutrition_goals").select("*")
+                .eq("user_id", user_id).limit(1).execute())
+    return first(response)
 
 
 def update_nutrition_goal(user_id: int, goal: NutritionGoalUpdate):
     data = goal.model_dump(exclude_unset=True)
-
     if not data:
         return get_nutrition_goal_by_user_id(user_id)
-
-    assignments = sql.SQL(", ").join(
-        sql.SQL("{} = %s").format(sql.Identifier(key))
-        for key in data
-    )
-
-    query = sql.SQL(
-        """
-        UPDATE nutrition_goals
-        SET {}, updated_at = NOW()
-        WHERE user_id = %s
-        RETURNING *
-        """
-    ).format(assignments)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, (*data.values(), user_id))
-            return cursor.fetchone()
+    # Original SQL always set updated_at = NOW() on updates.
+    data["updated_at"] = datetime.now(timezone.utc)
+    response = (get_supabase().table("nutrition_goals")
+                .update(serialize(data)).eq("user_id", user_id).execute())
+    return first(response)
 
 
 def delete_nutrition_goal(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                DELETE FROM nutrition_goals
-                WHERE user_id = %s RETURNING id
-                """,
-                (user_id,)
-            )
-            return cursor.fetchone()
-
+    response = get_supabase().table("nutrition_goals").delete().eq("user_id", user_id).execute()
+    row = first(response)
+    return {"id": row["id"]} if row else None

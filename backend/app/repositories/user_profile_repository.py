@@ -1,77 +1,29 @@
-
-from psycopg.rows import dict_row
-from app.database import get_connection
-from app.models.user_profile import (
-    UserProfileCreate,
-    UserProfileUpdate
-)
+from app.database import get_supabase
+from app.repositories._supabase_utils import first, serialize
+from app.models.user_profile import UserProfileCreate, UserProfileUpdate
 
 
 def create_profile(profile: UserProfileCreate):
-    data = profile.model_dump()
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                INSERT INTO user_profiles (
-                    user_id, display_name, date_of_birth,
-                    height_cm, weight_kg, activity_level
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING *
-                """,
-                (
-                    data["user_id"],
-                    data["display_name"],
-                    data["date_of_birth"],
-                    data["height_cm"],
-                    data["weight_kg"],
-                    data["activity_level"]
-                )
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("user_profiles").insert(serialize(profile.model_dump())).execute()
+    return first(response)
 
 
 def get_profile_by_user_id(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT * FROM user_profiles WHERE user_id = %s",
-                (user_id,)
-            )
-            return cursor.fetchone()
+    response = (get_supabase().table("user_profiles").select("*")
+                .eq("user_id", user_id).limit(1).execute())
+    return first(response)
 
 
 def update_profile(user_id: int, profile: UserProfileUpdate):
-    from psycopg import sql
-
     data = profile.model_dump(exclude_unset=True)
-
     if not data:
         return get_profile_by_user_id(user_id)
-
-    assignments = sql.SQL(", ").join(
-        sql.SQL("{} = %s").format(sql.Identifier(key))
-        for key in data
-    )
-
-    query = sql.SQL(
-        "UPDATE user_profiles SET {} WHERE user_id = %s RETURNING *"
-    ).format(assignments)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, (*data.values(), user_id))
-            return cursor.fetchone()
+    response = (get_supabase().table("user_profiles").update(serialize(data))
+                .eq("user_id", user_id).execute())
+    return first(response)
 
 
 def delete_profile(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "DELETE FROM user_profiles WHERE user_id = %s RETURNING id",
-                (user_id,)
-            )
-            return cursor.fetchone()
-
+    response = get_supabase().table("user_profiles").delete().eq("user_id", user_id).execute()
+    row = first(response)
+    return {"id": row["id"]} if row else None

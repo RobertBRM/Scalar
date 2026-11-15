@@ -1,109 +1,51 @@
-
-from psycopg.rows import dict_row
-from app.database import get_connection
-from app.models.meal_item import (
-    MealItemCreate,
-    MealItemUpdate
-)
+from app.database import get_supabase
+from app.repositories._supabase_utils import first, serialize
+from app.models.meal_item import MealItemCreate, MealItemUpdate
 
 
 def create_meal_item(item: MealItemCreate):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                INSERT INTO meal_items (
-                    meal_id, food_id, quantity
-                )
-                VALUES (%s, %s, %s)
-                RETURNING *
-                """,
-                (
-                    item.meal_id,
-                    item.food_id,
-                    item.quantity
-                )
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("meal_items").insert(serialize(item.model_dump())).execute()
+    return first(response)
 
 
 def get_meal_item_by_id(item_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT * FROM meal_items WHERE id = %s",
-                (item_id,)
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("meal_items").select("*").eq("id", item_id).limit(1).execute()
+    return first(response)
 
 
 def get_items_by_meal(meal_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT * FROM meal_items
-                WHERE meal_id = %s
-                ORDER BY id
-                """,
-                (meal_id,)
-            )
-            return cursor.fetchall()
+    response = (get_supabase().table("meal_items").select("*")
+                .eq("meal_id", meal_id).order("id").execute())
+    return response.data
 
 
 def get_meal_food_details(meal_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT
-                    mi.id,
-                    mi.meal_id,
-                    mi.food_id,
-                    mi.quantity,
-                    f.name,
-                    f.calories,
-                    f.protein_g,
-                    f.carbs_g,
-                    f.fat_g
-                FROM meal_items mi
-                JOIN foods f ON mi.food_id = f.id
-                WHERE mi.meal_id = %s
-                """,
-                (meal_id,)
-            )
-            return cursor.fetchall()
+    # Requires a foreign key from meal_items.food_id to foods.id.
+    response = (get_supabase().table("meal_items")
+                .select("id,meal_id,food_id,quantity,foods!inner(name,calories,protein_g,carbs_g,fat_g)")
+                .eq("meal_id", meal_id).execute())
+    results = []
+    for row in response.data:
+        food = row.get("foods") or {}
+        results.append({
+            "id": row["id"], "meal_id": row["meal_id"],
+            "food_id": row["food_id"], "quantity": row["quantity"],
+            "name": food.get("name"), "calories": food.get("calories"),
+            "protein_g": food.get("protein_g"), "carbs_g": food.get("carbs_g"),
+            "fat_g": food.get("fat_g"),
+        })
+    return results
 
 
 def update_meal_item(item_id: int, item: MealItemUpdate):
     data = item.model_dump(exclude_unset=True)
-
     if not data:
         return get_meal_item_by_id(item_id)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                UPDATE meal_items
-                SET quantity = %s
-                WHERE id = %s
-                RETURNING *
-                """,
-                (data["quantity"], item_id)
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("meal_items").update(serialize(data)).eq("id", item_id).execute()
+    return first(response)
 
 
 def delete_meal_item(item_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                DELETE FROM meal_items
-                WHERE id = %s RETURNING id
-                """,
-                (item_id,)
-            )
-            return cursor.fetchone()
-
+    response = get_supabase().table("meal_items").delete().eq("id", item_id).execute()
+    row = first(response)
+    return {"id": row["id"]} if row else None
