@@ -1,41 +1,23 @@
-
-from psycopg.rows import dict_row
-from app.database import get_connection
-
-
+from app.database import get_supabase
+from app.repositories._supabase_utils import first, serialize
 def create_user(email: str, password_hash: str):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                INSERT INTO users (email, password_hash)
-                VALUES (%s, %s)
-                RETURNING id, email, created_at
-                """,
-                (email, password_hash)
-            )
-            return cursor.fetchone()
+    response = (get_supabase().table("users")
+                .insert({"email": email, "password_hash": password_hash}).execute())
+    row = first(response)
+    return {k: row[k] for k in ("id", "email", "created_at")} if row else None
 
 
 def get_user_by_id(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT id, email, created_at FROM users WHERE id = %s",
-                (user_id,)
-            )
-            return cursor.fetchone()
+    response = (get_supabase().table("users").select("id,email,created_at")
+                .eq("id", user_id).limit(1).execute())
+    return first(response)
 
 
 def get_user_by_email(email: str):
-    # Internal use for authentication
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT * FROM users WHERE email = %s",
-                (email,)
-            )
-            return cursor.fetchone()
+    # Internal authentication lookup; must remain backend-only.
+    response = (get_supabase().table("users").select("*")
+                .eq("email", email).limit(1).execute())
+    return first(response)
 
 
 def update_user(user_id: int, email: str | None = None,
@@ -45,34 +27,15 @@ def update_user(user_id: int, email: str | None = None,
         updates["email"] = email
     if password_hash is not None:
         updates["password_hash"] = password_hash
-
     if not updates:
         return get_user_by_id(user_id)
-
-    from psycopg import sql
-
-    assignments = sql.SQL(", ").join(
-        sql.SQL("{} = %s").format(sql.Identifier(column))
-        for column in updates
-    )
-
-    query = sql.SQL(
-        "UPDATE users SET {} WHERE id = %s "
-        "RETURNING id, email, created_at"
-    ).format(assignments)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, (*updates.values(), user_id))
-            return cursor.fetchone()
+    response = (get_supabase().table("users").update(updates)
+                .eq("id", user_id).execute())
+    row = first(response)
+    return {k: row[k] for k in ("id", "email", "created_at")} if row else None
 
 
 def delete_user(user_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "DELETE FROM users WHERE id = %s RETURNING id",
-                (user_id,)
-            )
-            return cursor.fetchone()
-
+    response = get_supabase().table("users").delete().eq("id", user_id).execute()
+    row = first(response)
+    return {"id": row["id"]} if row else None

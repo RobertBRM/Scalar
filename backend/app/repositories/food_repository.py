@@ -1,97 +1,38 @@
-
-from psycopg.rows import dict_row
-from psycopg import DatabaseError, sql
-from app.database import get_connection
+from app.database import get_supabase
+from app.repositories._supabase_utils import first, serialize
 from app.models.food import FoodCreate, FoodUpdate
 
-from app.core.exceptions import handle_database_errors
 
-
-@handle_database_errors
 def create_food(food: FoodCreate):
-    data = food.model_dump()
+    response = get_supabase().table("foods").insert(serialize(food.model_dump())).execute()
+    return first(response)
 
-    columns = sql.SQL(", ").join(
-        sql.Identifier(key) for key in data
-    )
 
-    placeholders = sql.SQL(", ").join(
-        sql.Placeholder() for _ in data
-    )
-
-    query = sql.SQL(
-        "INSERT INTO foods ({}) VALUES ({}) RETURNING *"
-    ).format(columns, placeholders)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, tuple(data.values()))
-            return cursor.fetchone()
-
-@handle_database_errors
 def get_food_by_id(food_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "SELECT * FROM foods WHERE id = %s",
-                (food_id,)
-            )
-            return cursor.fetchone()
+    response = get_supabase().table("foods").select("*").eq("id", food_id).limit(1).execute()
+    return first(response)
 
 
-@handle_database_errors
 def get_all_foods():
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute("SELECT * FROM foods ORDER BY id")
-            return cursor.fetchall()
+    response = get_supabase().table("foods").select("*").order("id").execute()
+    return response.data
 
 
-@handle_database_errors
 def search_foods(name: str):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT * FROM foods
-                WHERE name ILIKE %s
-                ORDER BY name
-                LIMIT 50
-                """,
-                (f"%{name}%",)
-            )
-            return cursor.fetchall()
+    response = (get_supabase().table("foods").select("*")
+                .ilike("name", f"%{name}%").order("name").limit(50).execute())
+    return response.data
 
 
-@handle_database_errors
 def update_food(food_id: int, food: FoodUpdate):
     data = food.model_dump(exclude_unset=True)
-
     if not data:
         return get_food_by_id(food_id)
-
-    assignments = sql.SQL(", ").join(
-        sql.SQL("{} = %s").format(sql.Identifier(key))
-        for key in data
-    )
-
-    query = sql.SQL(
-        "UPDATE foods SET {} WHERE id = %s RETURNING *"
-    ).format(assignments)
-
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, (*data.values(), food_id))
-            return cursor.fetchone()
+    response = get_supabase().table("foods").update(serialize(data)).eq("id", food_id).execute()
+    return first(response)
 
 
-@handle_database_errors
 def delete_food(food_id: int):
-    with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                "DELETE FROM foods WHERE id = %s RETURNING id",
-                (food_id,)
-            )
-            return cursor.fetchone()
-
+    response = get_supabase().table("foods").delete().eq("id", food_id).execute()
+    row = first(response)
+    return {"id": row["id"]} if row else None
