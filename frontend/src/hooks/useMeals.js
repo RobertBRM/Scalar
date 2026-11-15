@@ -1,10 +1,11 @@
 
-import { useState, useEffect } from 'react';
-import { createMeal, getUserMeals } from '../services/mealService';
+import { useState, useEffect, useRef } from 'react';
+import { logMeal, loadDiary } from '../services/mealService';
+import { USER_ID } from '../services/api';
+import { useStoredState } from './usePreferences';
 
-const USER_ID = 1; // Replace with authenticated user ID later
 
-function toFrontendMeal(meal) {
+function toFrontendMeal(meal, nutrition = {}) {
   return {
     id: meal.id,
     name: meal.meal_type.charAt(0).toUpperCase() +
@@ -14,52 +15,68 @@ function toFrontendMeal(meal) {
       { hour: '2-digit', minute: '2-digit' }
     ),
     food: meal.notes || '',
-    cal: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
+    cal: Number(nutrition.calories || 0),
+    protein: Number(nutrition.protein_g || 0),
+    carbs: Number(nutrition.carbs_g || 0),
+    fat: Number(nutrition.fat_g || 0),
     icon: '🍽️'
   };
 }
 
 export function useMeals() {
-  const [meals, setMeals] = useState([]);
+  const [meals, setMeals] = useStoredState('meals', []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const revision = useRef(0);
+  const saving = useRef(false);
 
   useEffect(() => {
     let active = true;
+    let refreshing = false;
 
-    getUserMeals(USER_ID)
+    function refresh() {
+      if (saving.current || refreshing) return;
+      refreshing = true;
+      const request = ++revision.current;
+      loadDiary(USER_ID)
       .then(data => {
-        if (active) {
-          setMeals(data.map(toFrontendMeal));
+        if (active && request === revision.current) {
+          setMeals(previous => data.flatMap(({meal, nutrition, error}) => {
+            if (!error) return [toFrontendMeal(meal, nutrition)];
+            const cached = previous.find(row => row.id === meal.id);
+            return cached ? [cached] : [];
+          }));
+          setError(data.some(row => row.error)
+            ? 'Some nutrition values could not refresh. Previously loaded values are still shown; retrying automatically.'
+            : null);
         }
       })
       .catch(err => {
-        if (active) setError(err.message);
+        if (active && request === revision.current) setError(err.message);
       })
       .finally(() => {
+        refreshing = false;
         if (active) setLoading(false);
       });
+    }
+    refresh();
+    const interval = setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
 
     return () => {
       active = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', refresh);
     };
   }, []);
 
   async function addMeal(entry) {
+    saving.current = true;
+    revision.current++;
     setError(null);
 
-    const payload = {
-      user_id: USER_ID,
-      meal_type: entry.name.toLowerCase(),
-      logged_at: new Date().toISOString(),
-      notes: entry.food
-    };
-
     try {
-      const created = await createMeal(payload);
+      const created = await logMeal(entry, USER_ID);
 
       const newMeal = {
         ...toFrontendMeal(created),
@@ -74,6 +91,8 @@ export function useMeals() {
     } catch (err) {
       setError(err.message);
       throw err;
+    } finally {
+      saving.current = false;
     }
   }
 
