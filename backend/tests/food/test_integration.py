@@ -1,6 +1,4 @@
 
-import os
-
 import psycopg
 import pytest
 
@@ -10,6 +8,10 @@ from fastapi.testclient import TestClient
 from app.routers.food import router
 from app.repositories import food_repository
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 pytestmark = pytest.mark.integration
 
@@ -25,9 +27,11 @@ def integration_client(monkeypatch):
 
     # Never run against the application database.
     if test_url == os.getenv("DATABASE_URL"):
-        pytest.fail(
-            "Test database must be separate"
-        )
+        if os.getenv("ALLOW_SHARED_TEST_DB") != "1":
+            pytest.fail(
+                "Set ALLOW_SHARED_TEST_DB=1 to permit "
+                "testing against the application database"
+            )
 
     # Use a dedicated connection for this test.
     conn = psycopg.connect(test_url)

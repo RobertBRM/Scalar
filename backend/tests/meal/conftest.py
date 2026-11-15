@@ -2,6 +2,7 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from datetime import datetime, timezone
 
 from app.routers.meal import router as meal_router
 
@@ -19,7 +20,8 @@ def valid_meal():
 def saved_meal(valid_meal):
     return {
         "id": 10,
-        **valid_meal
+        **valid_meal,
+        "logged_at": datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
     }
 
 

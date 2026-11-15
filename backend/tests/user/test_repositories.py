@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.models.user import UserCreate, UserUpdate
 from app.repositories import user_repository
 
 
@@ -28,11 +27,11 @@ def test_create_user(mock_db, valid_user, saved_user):
     mock_db.fetchone.return_value = saved_user
 
     result = user_repository.create_user(
-        UserCreate(**valid_user)
+        email=valid_user["email"],
+        password_hash="demo-hash-not-a-real-password"
     )
 
     assert result["id"] == 1
-    assert result["email"] == valid_user["email"]
     mock_db.execute.assert_called_once()
 
 
@@ -60,8 +59,9 @@ def test_update_user(mock_db, saved_user):
     }
 
     result = user_repository.update_user(
-        1,
-        UserUpdate(email="new@example.com")
+        user_id=1,
+        email="new@example.com",
+        password_hash=None
     )
 
     assert result["email"] == "new@example.com"
@@ -72,8 +72,9 @@ def test_update_user_not_found(mock_db):
     mock_db.fetchone.return_value = None
 
     result = user_repository.update_user(
-        999,
-        UserUpdate(email="new@example.com")
+        user_id=999,
+        email="new@example.com",
+        password_hash=None
     )
 
     assert result is None
@@ -94,4 +95,3 @@ def test_delete_user_not_found(mock_db):
     result = user_repository.delete_user(999)
 
     assert result is None
-

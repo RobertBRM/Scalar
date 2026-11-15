@@ -22,8 +22,8 @@ def test_create_user_missing_email(valid_user):
         UserCreate(**valid_user)
 
 
-def test_create_user_missing_password_hash(valid_user):
-    del valid_user["password_hash"]
+def test_create_user_missing_password(valid_user):
+    del valid_user["password"]
 
     with pytest.raises(ValidationError):
         UserCreate(**valid_user)

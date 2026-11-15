@@ -6,13 +6,17 @@ from app.models.user import UserCreate, UserUpdate
 from app.services import user_service
 
 
-def test_create_user(
-    monkeypatch, valid_user, saved_user
-):
+def test_create_user(monkeypatch, valid_user, saved_user):
+    monkeypatch.setattr(
+        user_service.user_repository,
+        "get_user_by_email",
+        lambda email: None
+    )
+
     monkeypatch.setattr(
         user_service.user_repository,
         "create_user",
-        lambda user: saved_user
+        lambda email, password_hash: saved_user
     )
 
     result = user_service.create_user(
@@ -50,8 +54,14 @@ def test_get_user_not_found(monkeypatch):
 def test_update_user(monkeypatch, saved_user):
     monkeypatch.setattr(
         user_service.user_repository,
+        "get_user_by_email",
+        lambda email: None
+    )
+
+    monkeypatch.setattr(
+        user_service.user_repository,
         "update_user",
-        lambda user_id, data: {
+        lambda user_id, email, password_hash: {
             **saved_user,
             "email": "new@example.com"
         }
@@ -68,8 +78,14 @@ def test_update_user(monkeypatch, saved_user):
 def test_update_user_not_found(monkeypatch):
     monkeypatch.setattr(
         user_service.user_repository,
+        "get_user_by_email",
+        lambda email: None
+    )
+
+    monkeypatch.setattr(
+        user_service.user_repository,
         "update_user",
-        lambda user_id, data: None
+        lambda user_id, email, password_hash: None
     )
 
     with pytest.raises(HTTPException) as error:
@@ -104,4 +120,3 @@ def test_delete_user_not_found(monkeypatch):
         user_service.delete_user(999)
 
     assert error.value.status_code == 404
-

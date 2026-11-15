@@ -28,12 +28,10 @@ def mock_db(monkeypatch):
     return cursor
 
 
-def test_create_profile(
-    mock_db, valid_profile, saved_profile
-):
+def test_create_profile(mock_db, valid_profile, saved_profile):
     mock_db.fetchone.return_value = saved_profile
 
-    result = user_profile_repository.create_user_profile(
+    result = user_profile_repository.create_profile(
         UserProfileCreate(**valid_profile)
     )
 
@@ -41,15 +39,10 @@ def test_create_profile(
     mock_db.execute.assert_called_once()
 
 
-def test_get_profile_by_user(
-    mock_db, saved_profile
-):
+def test_get_profile_by_user(mock_db, saved_profile):
     mock_db.fetchone.return_value = saved_profile
 
-    result = (
-        user_profile_repository
-        .get_user_profile_by_user_id(1)
-    )
+    result = user_profile_repository.get_profile_by_user_id(1)
 
     assert result["user_id"] == 1
     mock_db.execute.assert_called_once()
@@ -58,10 +51,7 @@ def test_get_profile_by_user(
 def test_get_profile_not_found(mock_db):
     mock_db.fetchone.return_value = None
 
-    result = (
-        user_profile_repository
-        .get_user_profile_by_user_id(999)
-    )
+    result = user_profile_repository.get_profile_by_user_id(999)
 
     assert result is None
 
@@ -72,7 +62,7 @@ def test_update_profile(mock_db, saved_profile):
         "weight_kg": 80
     }
 
-    result = user_profile_repository.update_user_profile(
+    result = user_profile_repository.update_profile(
         1,
         UserProfileUpdate(weight_kg=80)
     )
@@ -84,7 +74,7 @@ def test_update_profile(mock_db, saved_profile):
 def test_update_profile_not_found(mock_db):
     mock_db.fetchone.return_value = None
 
-    result = user_profile_repository.update_user_profile(
+    result = user_profile_repository.update_profile(
         999,
         UserProfileUpdate(weight_kg=80)
     )
@@ -95,9 +85,7 @@ def test_update_profile_not_found(mock_db):
 def test_delete_profile(mock_db):
     mock_db.fetchone.return_value = {"id": 10}
 
-    result = user_profile_repository.delete_user_profile(
-        1
-    )
+    result = user_profile_repository.delete_profile(1)
 
     assert result == {"id": 10}
 
@@ -105,9 +93,6 @@ def test_delete_profile(mock_db):
 def test_delete_profile_not_found(mock_db):
     mock_db.fetchone.return_value = None
 
-    result = user_profile_repository.delete_user_profile(
-        999
-    )
+    result = user_profile_repository.delete_profile(999)
 
     assert result is None
-

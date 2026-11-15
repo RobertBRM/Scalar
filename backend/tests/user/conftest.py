@@ -12,21 +12,20 @@ from app.routers.user import router
 def valid_user():
     return {
         "email": "test@example.com",
-        "password_hash": "demo-hash-not-a-real-password"
+        "password": "TestPassword123!"
     }
-
 
 @pytest.fixture
 def saved_user(valid_user):
     return {
         "id": 1,
-        **valid_user,
+        "email": valid_user["email"],
+        "password_hash": "demo-hash-not-a-real-password",
         "created_at": datetime(
             2026, 11, 14, 12, 0,
             tzinfo=timezone.utc
         )
     }
-
 
 @pytest.fixture
 def client():

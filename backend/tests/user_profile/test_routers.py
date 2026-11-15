@@ -9,7 +9,7 @@ def test_create_profile(
 ):
     monkeypatch.setattr(
         user_profile_service,
-        "create_user_profile",
+        "create_profile",
         lambda profile: saved_profile
     )
 
@@ -58,7 +58,7 @@ def test_create_missing_user(client, valid_profile):
 def test_get_profile(client, monkeypatch, saved_profile):
     monkeypatch.setattr(
         user_profile_service,
-        "get_user_profile",
+        "get_profile",
         lambda user_id: saved_profile
     )
 
@@ -77,7 +77,7 @@ def test_get_profile_not_found(client, monkeypatch):
 
     monkeypatch.setattr(
         user_profile_service,
-        "get_user_profile",
+        "get_profile",
         fake_get
     )
 
@@ -91,7 +91,7 @@ def test_update_profile(
 ):
     monkeypatch.setattr(
         user_profile_service,
-        "update_user_profile",
+        "update_profile",
         lambda user_id, data: {
             **saved_profile,
             "weight_kg": 80
@@ -119,7 +119,7 @@ def test_update_invalid_weight(client):
 def test_delete_profile(client, monkeypatch):
     monkeypatch.setattr(
         user_profile_service,
-        "delete_user_profile",
+        "delete_profile",
         lambda user_id: {"id": 10}
     )
 
