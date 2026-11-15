@@ -41,9 +41,7 @@ def create_meal_item(item: MealItemCreate):
 
 
 def get_meal_item(item_id: int):
-    item = meal_item_repository.get_meal_item_by_id(
-        item_id
-    )
+    item = meal_item_repository.get_meal_item_by_id(item_id)
 
     if item is None:
         raise HTTPException(
